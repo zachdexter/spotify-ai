@@ -1,0 +1,9 @@
+cd server           node server.js      to start backend
+cd client           npm run dev         to start frontend
+
+click on localhost:5173
+
+things to add?: 
+- what percentage of total listening is attributed to x artist (pie chart) also genre distribution -- not possible nice
+- shuffle playlist thing (mom's idea)
+
