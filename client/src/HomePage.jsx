@@ -80,12 +80,18 @@ const HomePage = () => {
       }}
     >
       {/* Logout Button */}
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-4 gap-4">
         <button
           onClick={handleLogout}
           className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-semibold transition"
         >
           Log Out
+        </button>
+        <button
+          onClick={() => window.location.href = `/playlist-generator?token=${token}`}
+          className="px-4 py-2 rounded bg-blue-700 hover:bg-blue-800 text-white font-semibold transition"
+        >
+          Generate Playlist
         </button>
       </div>
 

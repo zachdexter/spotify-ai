@@ -117,6 +117,85 @@ app.get('/homepage', async (req, res) => {
 const { OpenAI } = require('openai'); // import OpenAI SDK
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // create OpenAI instance with API key
 
+app.use(express.json()); // need to parse json boyd in post requests
+
+app.post('/generate-playlist', async(req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // gets token from request header
+  if (!token) return res.status(401).send('No token provided');
+
+  const userPrompt = req.body.prompt; // get user's prompt from request body
+  if (!userPrompt) return res.status(400).send('No prompt provided');
+
+  const { spotifyApi } = userSpotifyApis.get(token) || {};
+  if (!spotifyApi) return res.status(401).send('Invalid token');
+
+  try {
+    // fetch user data
+    // const topTracks = await spotifyApi.getMyTopTracks({ time_range: 'medium_term', limit: 20 });
+    // const trackSummary = topTracks.body.items.map(t => `${t.name} by ${t.artists[0].name}`).join(', ');
+    // get all of user's saved tracks
+    let allTracks = [];
+    let limit = 50;
+    let offset = 0;
+    let total = 0;
+
+    do {
+      const response = await spotifyApi.getMySavedTracks({ limit, offset });
+      allTracks = allTracks.concat(response.body.items);
+      total = response.body.total;
+      offset += limit;
+    } while (allTracks.length < total);
+
+    // get unique artist ids
+    const artistIds = new Set();
+    allTracks.forEach(item => {
+      item.track.artists.forEach(artist => {
+        artistIds.add(artist.id);
+      });
+    });
+
+    // fetch genres from artists in batches of 50 
+    const artistArray = Array.from(artistIds);
+    const genreCount = {};
+
+    for (let i = 0; i < artistArray.length; i += 50) {
+      const batch = artistArray.slice(i, i + 50);
+      const artistData = await spotifyApi.getArtists(batch);
+
+      artistData.body.artists.forEach(artist => {
+        artist.genres.forEach(genre => {
+          genreCount[genre] = (genreCount[genre] || 0) + 1;
+        });
+      });
+    }
+
+    // build genre summary string
+    const genreSummary = Object.entries(genreCount)
+    .sort((a,b) => b[1] - a[1]) // sort by count descending
+    .slice(0, 15)
+    .map(([genre, count]) => `${genre} (${count})`)
+    .join(', ');
+
+    // call openai to suggest tracks
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+      { role: 'system', content: 'You are a spotify playlist generator bot.'},
+      { role: 'user', content: `User listens to: ${genreSummary}. Based on this, and the prompt: "${userPrompt}", generate a playlist. IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...].` }
+      ],
+    });
+      
+      const suggestions = completion.choices[0].message.content;
+
+      console.log('OpenAI response:', suggestions);
+
+      res.json({ playlist: suggestions });
+  } catch (err) {
+    console.error('Error generating playlist:', err);
+    res.status(500).send('Failed to generate playlist');
+  }
+});
+
 
 app.get('/logout', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1]; // gets token from request header
