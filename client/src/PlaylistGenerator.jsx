@@ -13,6 +13,9 @@ const PlaylistGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editedPlaylist, setEditedPlaylist] = useState([]);
+
 
   // Helper to fetch track images from Spotify API
   const fetchTrackImages = async (playlistArr) => {
@@ -71,7 +74,16 @@ const PlaylistGenerator = () => {
 
       //remove ```json if present 
       content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-
+      if (content.startsWith('{') && content.includes('"playlist":')) {
+        try {
+          const obj = JSON.parse(content);
+          if (Array.isArray(obj.playlist)) {
+            content = JSON.stringify(obj.playlist);
+          }
+        } catch {
+          // ignore, fallback to normal parsing below
+        }
+      }
       // Try to parse the playlist as JSON array
       let parsed;
       try {
@@ -167,11 +179,112 @@ const PlaylistGenerator = () => {
           >
             Add to Spotify
           </button>
+          
           )}
+          <button
+            onClick={() => {
+              setEditedPlaylist([...playlist]); // clone playlist into editable version
+              setModalOpen(false);
+              setEditModalOpen(true);
+            }}
+            className="mt-4 w-full px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-700 text-white font-semibold"
+          >
+            ✏️ Edit Playlist
+          </button>
+
         </div>
       </div>
     );
   };
+
+
+  const EditModal = ({ open, onClose }) => {
+    if (!open) return null;
+
+    // Move these states inside the modal
+    const [chatPrompt, setChatPrompt] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+
+    const handleRemove = (index) => {
+      const updated = [...editedPlaylist];
+      updated.splice(index, 1);
+      setEditedPlaylist(updated);
+    };
+
+    const handleChatSubmit = async () => {
+      if (!chatPrompt) return;
+      setChatLoading(true);
+      try {
+        const res = await fetch ('http://localhost:5000/refine-playlist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            prompt: chatPrompt,
+            playlist: editedPlaylist
+          }),
+        });
+        const data = await res.json();
+        let cleaned = data.playlist.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        setEditedPlaylist(parsed);
+        setChatPrompt('');
+      } catch (err) {
+        console.error('Error refining playlist:', err);
+      }
+      setChatLoading(false);
+    };
+
+    return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70" style={{ fontFamily: fontStack }}>
+      <div className="bg-[#1f2937] rounded-lg shadow-lg p-8 max-w-xl w-full relative border" style={{ borderColor: accentBlue }}>
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold"
+        >
+          ×
+        </button>
+        <h2 className="text-2xl font-bold mb-4 text-center" style={{ color: accentBlue }}>Edit Playlist</h2>
+
+        <ul className="space-y-3 max-h-[50vh] overflow-y-auto mb-4">
+          {editedPlaylist.map((item, idx) => (
+            <li key={idx} className="flex items-center justify-between bg-[#111827] px-4 py-2 rounded">
+              <div>
+                <span className="text-blue-100 font-semibold">{item.track}</span>
+                <span className="text-blue-300 ml-2">by {item.artist}</span>
+              </div>
+              <button
+                onClick={() => handleRemove(idx)}
+                className="text-red-400 hover:text-red-600 font-bold text-lg"
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div>
+          <textarea
+            value={chatPrompt}
+            onChange={(e) => setChatPrompt(e.target.value)}
+            placeholder="Ask the AI to tweak the playlist (e.g., add more rock songs)..."
+            className="w-full p-2 rounded bg-[#1e293b] text-blue-100 border border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            rows={2}
+          />
+          <button
+            onClick={handleChatSubmit}
+            disabled={chatLoading}
+            className="mt-2 w-full px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition"
+          >
+            {chatLoading ? 'Talking to AI...' : 'Update Playlist'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   return (
     <div
@@ -229,6 +342,8 @@ const PlaylistGenerator = () => {
       </div>
       {/* Modal for playlist */}
       <PlaylistModal open={modalOpen} onClose={() => setModalOpen(false)} playlist={playlistWithImages} />
+      <EditModal open={editModalOpen} onClose={() => setEditModalOpen(false)} />
+
     </div>
   );
 };

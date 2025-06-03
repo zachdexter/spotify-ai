@@ -183,7 +183,8 @@ app.post('/generate-playlist', async(req, res) => {
       model: 'gpt-3.5-turbo',
       messages: [
       { role: 'system', content: 'You are a spotify playlist generator bot.'},
-      { role: 'user', content: `User listens to: ${genreSummary}. Based on this, and the prompt: "${userPrompt}", generate a playlist. IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...].` }
+      { role: 'user', content: `User listens to: ${genreSummary}. Based on this, and the prompt: "${userPrompt}", generate a playlist. IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...].
+          IMPORTANT: the response should be strictly in this format.` }
       ],
     });
       
@@ -236,6 +237,31 @@ app.post('/create-playlist', async (req, res) => {
   } catch (err) { 
     console.error('Error creating playlist:', err);
     res.status(500).send('Failed to create playlist');
+  }
+});
+
+app.post('/refine-playlist', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1]; // gets token from request header
+  if (!token) return res.status(401).send('No token provided');
+
+  const { prompt, playlist } = req.body;
+  if (!prompt || !playlist) return res.status(400).send('Invalid request body');
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo', 
+      messages: [
+        { role: 'system', content: 'You are a helpful Spotify playlist editor.' },
+        { role: 'user', content: `Here is a playlist: ${JSON.stringify(playlist)}. The user says: "${prompt}". 
+        Please respond with the updated playlist as a JSON array with "track" and "artist" fields. Maintain the original playlist as much as possible,
+        do not remove tracks unless the prompt explicitly asks for it.
+        IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...]`}
+      ]
+    });
+    res.json({ playlist: completion.choices[0].message.content });
+  } catch (err) {
+    console.error('Error refining playlist:', err);
+    res.status(500).send('Failed to refine playlist');
   }
 });
 
