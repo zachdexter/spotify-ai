@@ -9,14 +9,48 @@ const PlaylistGenerator = () => {
 
   const [prompt, setPrompt] = useState('');
   const [playlist, setPlaylist] = useState(null);
+  const [playlistWithImages, setPlaylistWithImages] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState('');
+
+  // Helper to fetch track images from Spotify API
+  const fetchTrackImages = async (playlistArr) => {
+    // For each track, search Spotify for the track and artist, get the first result's album image
+    const results = await Promise.all(
+      playlistArr.map(async (item) => {
+        try {
+          const q = encodeURIComponent(`${item.track} ${item.artist}`);
+          const res = await fetch(
+            `https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          if (!res.ok) throw new Error('Spotify search failed');
+          const data = await res.json();
+          const found = data.tracks?.items?.[0];
+          return {
+            ...item,
+            image: found?.album?.images?.[0]?.url || null,
+            spotifyUrl: found?.external_urls?.spotify || null,
+          };
+        } catch {
+          return { ...item, image: null, spotifyUrl: null };
+        }
+      })
+    );
+    return results;
+  };
 
   const handleGenerate = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setPlaylist(null);
+    setPlaylistWithImages(null);
 
     try {
       const res = await fetch('http://localhost:5000/generate-playlist', {
@@ -33,22 +67,110 @@ const PlaylistGenerator = () => {
       }
 
       const data = await res.json();
+      let content = data.playlist;
 
-      console.log('Received playlist data:', data);
+      //remove ```json if present 
+      content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+
       // Try to parse the playlist as JSON array
-      let parsed = [];
+      let parsed;
       try {
-        parsed = JSON.parse(data.playlist);
+        parsed = JSON.parse(content);
       } catch {
         setError('Could not parse playlist response.');
         setLoading(false);
         return;
       }
       setPlaylist(parsed);
+
+      // Fetch images for each track
+      const withImages = await fetchTrackImages(parsed);
+      setPlaylistWithImages(withImages);
+      setModalOpen(true);
     } catch (err) {
       setError('Error generating playlist.');
     }
     setLoading(false);
+  };
+
+  // Modal component
+  const PlaylistModal = ({ open, onClose, playlist }) => {
+    if (!open || !playlist) return null;
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70"
+        style={{ fontFamily: fontStack }}
+      >
+        <div className="bg-[#181f2a] rounded-lg shadow-lg p-8 max-w-lg w-full relative border" style={{ borderColor: accentBlue }}>
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl font-bold"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          <h2 className="text-2xl font-bold mb-6 text-center" style={{ color: accentBlue, fontFamily: `'Montserrat', ${fontStack}` }}>
+            Your Generated Playlist
+          </h2>
+          <ul className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {playlist.map((item, idx) => (
+              <li key={idx} className="flex items-center gap-4 bg-[#1e293b] rounded px-3 py-2">
+                <img
+                  src={item.image || "https://via.placeholder.com/56x56?text=No+Image"}
+                  alt={item.track}
+                  className="w-14 h-14 rounded object-cover border"
+                  style={{ borderColor: accentBlue }}
+                />
+                <div className="flex flex-col min-w-0">
+                  <span className="font-bold text-blue-100 truncate" title={item.track}>
+                    {item.track}
+                  </span>
+                  <span className="text-blue-300 truncate" title={item.artist}>
+                    {item.artist}
+                  </span>
+                  {item.spotifyUrl && (
+                    <a
+                      href={item.spotifyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:underline mt-1"
+                    >
+                      Open in Spotify
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {playlist.length > 0 && (
+          <button
+            onClick={async () => {
+              console.log('Creating playlist on Spotify with tracks:', playlist);
+              const res = await fetch('http://localhost:5000/create-playlist', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  name: `AI Playlist - ${new Date().toLocaleDateString()}`,
+                  tracks: playlist,
+                }),
+              });
+
+              const data = await res.json();
+              if (data.playlistUrl) {
+                window.open(data.playlistUrl, '_blank');
+              }
+            }}
+            className="mt-4 px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white font-semibold"
+          >
+            Add to Spotify
+          </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -104,24 +226,9 @@ const PlaylistGenerator = () => {
         {error && (
           <div className="mb-4 text-red-400 text-center">{error}</div>
         )}
-        {playlist && (
-          <div>
-            <h2 className="text-xl font-semibold mb-3 text-blue-200 text-center">Your Playlist</h2>
-            <ul className="space-y-3">
-              {playlist.map((item, idx) => (
-                <li
-                  key={idx}
-                  className="flex items-center gap-3 bg-[#1e293b] rounded px-4 py-2"
-                  style={{ borderLeft: `4px solid ${accentBlue}` }}
-                >
-                  <span className="font-bold text-blue-100">{item.track}</span>
-                  <span className="text-blue-300">by {item.artist}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
+      {/* Modal for playlist */}
+      <PlaylistModal open={modalOpen} onClose={() => setModalOpen(false)} playlist={playlistWithImages} />
     </div>
   );
 };
