@@ -10,3 +10,7 @@ things to add?:
 todo: 
 
 improve the prompts to give more information about the user, allowing for better recommendations
+
+edit already existing playlist feature?
+
+option to edit the name of newly generated playlist, or just an ai name to fit it

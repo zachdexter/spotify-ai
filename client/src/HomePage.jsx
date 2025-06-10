@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import './index.css';
 
-const accentBlue = "#1e3a8a"; // Tailwind blue-800
+const accentBlue = "#1e3a8a";
+const accentGreen = "#1ed760";
 const fontStack = `'Poppins', 'Montserrat', 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif`;
 
 // Helper to truncate text
@@ -68,59 +69,155 @@ const HomePage = () => {
     window.location.href = '/';
   };
 
-  if (!user) return <p className="text-white bg-black min-h-screen flex items-center justify-center" style={{ fontFamily: fontStack }}>Loading...</p>;
+  // Accent that follows scroll position
+  // const [scrollY, setScrollY] = useState(0);
+
+  // useEffect(() => {
+  //   const handleScroll = () => setScrollY(window.scrollY);
+  //   window.addEventListener('scroll', handleScroll, { passive: true });
+  //   return () => window.removeEventListener('scroll', handleScroll);
+  // }, []);
+
+  // Generate star positions only once on mount
+  const starsRef = useRef([]);
+  if (starsRef.current.length === 0) {
+    starsRef.current = Array.from({ length: 40 }).map(() => {
+      const size = Math.random() * 2 + 1.5;
+      const left = Math.random() * 100;
+      const top = Math.random() * 100;
+      const duration = 2 + Math.random() * 2;
+      const delay = Math.random() * 4;
+      return { size, left, top, duration, delay };
+    });
+  }
+
+  if (!user) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ fontFamily: fontStack, background: "#0f172a" }}>
+      <span className="text-blue-100 text-xl">Loading...</span>
+    </div>
+  );
 
   return (
     <div
-      className="min-h-screen p-8"
+      className="min-h-screen w-full flex flex-col items-center justify-center relative overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, #0f172a 0%, ${accentBlue} 100%)`,
-        color: "#e0e7ef",
-        fontFamily: fontStack
+        fontFamily: fontStack,
+        background: "#0f172a",
+        position: "relative",
       }}
     >
-      {/* Logout Button */}
-      <div className="flex justify-end mb-4 gap-4">
-        <button
-          onClick={handleLogout}
-          className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white font-semibold transition"
-        >
-          Log Out
-        </button>
-        <button
-          onClick={() => window.location.href = `/playlist-generator?token=${token}`}
-          className="px-4 py-2 rounded bg-blue-700 hover:bg-blue-800 text-white font-semibold transition"
-        >
-          Generate Playlist
-        </button>
-      </div>
-
-      {/* Profile Info */}
-      <div className="text-center mb-8">
-        <h1
-          className="text-4xl font-bold mb-2"
-          style={{ color: "#fff", fontFamily: `'Montserrat', ${fontStack}` }}
-        >
-          Welcome, {user.name}
-        </h1>
-        {user.profilePicture && (
-          <img
-            src={user.profilePicture}
-            alt="Profile"
-            className="rounded-full w-36 h-36 mx-auto border-4"
-            style={{ borderColor: accentBlue, boxShadow: `0 0 24px 0 ${accentBlue}80` }}
+      {/* Twinkling stars background */}
+      <style>
+        {`
+        .starfield {
+          position: fixed;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+        }
+        .star {
+          position: absolute;
+          border-radius: 50%;
+          background: #e0e7ef;
+          opacity: 0.7;
+          animation: twinkle 2.5s infinite;
+        }
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 0.2; }
+        }
+        `}
+      </style>
+      <div className="starfield" style={{zIndex: 0}}>
+        {starsRef.current.map((star, i) => (
+          <div
+            key={i}
+            className="star"
+            style={{
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              left: `${star.left}%`,
+              top: `${star.top}%`,
+              animationDuration: `${star.duration}s`,
+              animationDelay: `${star.delay}s`,
+              boxShadow: `0 0 ${star.size * 4}px ${star.size / 2}px #e0e7ef88`,
+              zIndex: 0,
+            }}
           />
-        )}
+        ))}
+      </div>
+      {/* Button Bar */}
+      <div className="w-full flex justify-center mt-8 mb-6" style={{zIndex: 1}}>
+        <div className="flex gap-4 bg-white/10 backdrop-blur-md rounded-2xl px-6 py-3 shadow-xl border border-blue-900 items-center">
+          <button
+            onClick={() => window.location.href = `/playlist-generator?token=${token}`}
+            className="flex items-center gap-2 px-5 py-2 rounded-full bg-gray-700 hover:bg-gray-800 text-blue-100 font-semibold shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            style={{ fontFamily: fontStack, letterSpacing: '0.01em' }}
+          >
+            {/* Music note icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-300" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 17V5a1 1 0 0 1 .76-.97l8-2A1 1 0 0 1 19 3v12.13A3.99 3.99 0 1 1 17 17V7.28l-6 1.5V17a3.99 3.99 0 1 1-2-3.47V5a1 1 0 0 1 .76-.97l8-2A1 1 0 0 1 19 3v12.13A3.99 3.99 0 1 1 17 17V7.28l-6 1.5V17a3.99 3.99 0 1 1-2-3.47z"/>
+            </svg>
+            Generate Playlist
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-5 py-2 rounded-full bg-gray-700 hover:bg-gray-800 text-blue-100 font-semibold shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            style={{ fontFamily: fontStack, letterSpacing: '0.01em' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h4a2 2 0 012 2v1" />
+            </svg>
+            Log Out
+          </button>
+        </div>
       </div>
 
-      {/* Time Range Selector */}
-      <div className="text-center mb-6">
-        <label htmlFor="timeRange" className="mr-2 font-medium text-blue-200">Time Range:</label>
+      {/* Profile Card */}
+      <div className="w-full max-w-3xl mx-auto bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-blue-900 p-8 flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center mb-6">
+          <div className="relative">
+            {user.profilePicture && (
+              <img
+                src={user.profilePicture}
+                alt="Profile"
+                className="rounded-full w-36 h-36 border-4 shadow-lg"
+                style={{ borderColor: accentBlue, boxShadow: `0 0 32px 0 ${accentBlue}80` }}
+              />
+            )}
+            <span className="absolute bottom-2 right-2 bg-green-500 rounded-full w-5 h-5 border-2 border-white"></span>
+          </div>
+          <h1
+            className="text-4xl font-extrabold mt-4 mb-1 text-center tracking-tight"
+            style={{ color: "#fff", fontFamily: `'Montserrat', ${fontStack}` }}
+          >
+            {user.name}
+          </h1>
+          <span className="text-blue-200 text-lg font-medium tracking-wide">Spotify Listener</span>
+        </div>
+        {/* Centered Top Stats Section */}
+        <div className="flex flex-col items-center w-full">
+          <span className="text-blue-200 font-medium mb-1 text-xl text-center">Your Top Stats</span>
+          <span className="text-blue-400 text-sm opacity-70 mb-2 text-center">Based on your Spotify listening</span>
+          {/* Add your personalized stat here */}
+          <div className="mt-2 text-lg text-blue-100 font-semibold text-center min-h-[2.5rem]">
+            {/* Example: */}
+            {/* You listened to 1,234 unique tracks this year! */}
+          </div>
+        </div>
+      </div>
+
+      {/* Time Range Selector - moved and clarified */}
+      <div className="w-full max-w-5xl flex flex-col items-center mb-6">
+        <label htmlFor="timeRange" className="mb-2 text-lg font-semibold text-blue-100 tracking-wide">
+          Sort Top Artists & Tracks By:
+        </label>
         <select
           id="timeRange"
-          className="px-3 py-1 rounded bg-[#1e293b] text-blue-100 border border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 rounded-lg bg-[#1e293b] text-blue-100 border border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value)}
+          style={{ minWidth: 180 }}
         >
           <option value="long_term">All Time</option>
           <option value="medium_term">Last 6 Months</option>
@@ -128,116 +225,104 @@ const HomePage = () => {
         </select>
       </div>
 
-      {/* Centered Columns Container */}
-      <div className="mx-auto" style={{ maxWidth: 1000 }}>
-        <div className="flex flex-col md:flex-row gap-6 justify-center">
-          {/* Artists Column */}
-          <div
-            className="flex-1 p-4 rounded-lg shadow"
+      {/* Stats Grid */}
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+        {/* Artists */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-lg border border-blue-900 p-6 flex flex-col">
+          <h2
+            className="text-2xl font-bold mb-4 text-center tracking-wide"
             style={{
-              background: "#111827",
-              border: `1.5px solid ${accentBlue}`,
-              boxShadow: `0 2px 16px 0 #0008`,
-              fontFamily: fontStack,
-              maxWidth: 440,
-              minWidth: 0
+              color: "#f1f5f9", // much lighter for contrast
+              fontFamily: `'Montserrat', ${fontStack}`,
+              textShadow: '0 2px 12px #000a'
             }}
           >
-            <h2
-              className="text-2xl font-semibold mb-4 text-center"
-              style={{ color: accentBlue, fontFamily: `'Montserrat', ${fontStack}` }}
-            >
-              Top 10 Artists
-            </h2>
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <span className="inline-block w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
-              </div>
-            ) : (
-              <ul className="space-y-4">
-                {user.artists.slice(0, 10).map((artist, index) => (
-                  <li key={index} className="flex items-center gap-4 min-w-0">
-                    <img
-                      src={artist.image}
-                      alt={artist.name}
-                      className="w-12 h-12 rounded border-2 flex-shrink-0"
-                      style={{ borderColor: accentBlue }}
-                    />
-                    <span
-                      className="text-lg font-medium text-blue-100 truncate"
-                      style={{
-                        maxWidth: 270,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: 'block'
-                      }}
-                      title={artist.name}
-                    >
-                      {truncate(artist.name, 40)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Tracks Column */}
-          <div
-            className="flex-1 p-4 rounded-lg shadow"
+            Top 10 Artists
+          </h2>
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <span className="inline-block w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+            </div>
+          ) : (
+            <ul className="space-y-4">
+              {user.artists.slice(0, 10).map((artist, index) => (
+                <li key={index} className="flex items-center gap-4 min-w-0 group hover:bg-blue-900/30 rounded-lg px-2 py-1 transition">
+                  <img
+                    src={artist.image}
+                    alt={artist.name}
+                    className="w-12 h-12 rounded border-2 flex-shrink-0 shadow"
+                    style={{ borderColor: accentBlue }}
+                  />
+                  <span
+                    className="text-lg font-medium text-blue-100 truncate group-hover:text-green-300 transition"
+                    style={{
+                      maxWidth: 270,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: 'block'
+                    }}
+                    title={artist.name}
+                  >
+                    {truncate(artist.name, 40)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {/* Tracks */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-lg border border-blue-900 p-6 flex flex-col">
+          <h2
+            className="text-2xl font-bold mb-4 text-center tracking-wide"
             style={{
-              background: "#111827",
-              border: `1.5px solid ${accentBlue}`,
-              boxShadow: `0 2px 16px 0 #0008`,
-              fontFamily: fontStack,
-              maxWidth: 440,
-              minWidth: 0
+              color: "#f1f5f9", // much lighter for contrast
+              fontFamily: `'Montserrat', ${fontStack}`,
+              textShadow: '0 2px 12px #000a'
             }}
           >
-            <h2
-              className="text-2xl font-semibold mb-4 text-center"
-              style={{ color: accentBlue, fontFamily: `'Montserrat', ${fontStack}` }}
-            >
-              Top 10 Tracks
-            </h2>
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <span className="inline-block w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
-              </div>
-            ) : (
-              <ul className="space-y-4">
-                {user.tracks.slice(0, 10).map((track, index) => (
-                  <li key={index} className="flex items-center gap-4 min-w-0">
-                    <img
-                      src={track.image}
-                      alt={track.name}
-                      className="w-12 h-12 rounded border-2 flex-shrink-0"
-                      style={{ borderColor: accentBlue }}
-                    />
-                    <span
-                      className="text-lg font-medium text-blue-100 truncate"
-                      style={{
-                        maxWidth: 270,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: 'block'
-                      }}
-                      title={track.name}
-                    >
-                      {truncate(track.name, 40)}
-                      <span className="text-blue-300">
-                        {" by "}
-                        {truncate(track.artist, 40)}
-                      </span>
+            Top 10 Tracks
+          </h2>
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <span className="inline-block w-12 h-12 border-4 border-blue-700 border-t-transparent rounded-full animate-spin"></span>
+            </div>
+          ) : (
+            <ul className="space-y-4">
+              {user.tracks.slice(0, 10).map((track, index) => (
+                <li key={index} className="flex items-center gap-4 min-w-0 group hover:bg-blue-900/30 rounded-lg px-2 py-1 transition">
+                  <img
+                    src={track.image}
+                    alt={track.name}
+                    className="w-12 h-12 rounded border-2 flex-shrink-0 shadow"
+                    style={{ borderColor: accentBlue }}
+                  />
+                  <span
+                    className="text-lg font-medium text-blue-100 truncate group-hover:text-green-300 transition"
+                    style={{
+                      maxWidth: 270,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: 'block'
+                    }}
+                    title={track.name}
+                  >
+                    {truncate(track.name, 40)}
+                    <span className="text-blue-300">
+                      {" by "}
+                      {truncate(track.artist, 40)}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
+      <footer className="w-full text-center text-blue-200 text-xs opacity-70 mb-2" style={{fontFamily: fontStack}}>
+        &copy; {new Date().getFullYear()} Spotify Stats &mdash; Not affiliated with Spotify
+      </footer>
     </div>
   );
 };
