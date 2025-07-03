@@ -69,14 +69,6 @@ const HomePage = () => {
     window.location.href = '/';
   };
 
-  // Accent that follows scroll position
-  // const [scrollY, setScrollY] = useState(0);
-
-  // useEffect(() => {
-  //   const handleScroll = () => setScrollY(window.scrollY);
-  //   window.addEventListener('scroll', handleScroll, { passive: true });
-  //   return () => window.removeEventListener('scroll', handleScroll);
-  // }, []);
 
   // Generate star positions only once on mount
   const starsRef = useRef([]);
@@ -207,7 +199,7 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* Time Range Selector - moved and clarified */}
+      {/* Time Range Selector */}
       <div className="w-full max-w-5xl flex flex-col items-center mb-6">
         <label htmlFor="timeRange" className="mb-2 text-lg font-semibold text-blue-100 tracking-wide">
           Sort Top Artists & Tracks By:

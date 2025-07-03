@@ -16,6 +16,7 @@ const PlaylistGenerator = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editedPlaylist, setEditedPlaylist] = useState([]);
   const [showSavedMsg, setShowSavedMsg] = useState(false);
+  const [showSpotifyDelayMsg, setShowSpotifyDelayMsg] = useState(false);
 
 
   // Helper to fetch track images from Spotify API
@@ -190,7 +191,9 @@ const PlaylistGenerator = () => {
                     setModalOpen(false);
                     setTimeout(() => {
                       setShowSavedMsg(true);
+                      setShowSpotifyDelayMsg(true);
                       setTimeout(() => setShowSavedMsg(false), 1800);
+                      setTimeout(() => setShowSpotifyDelayMsg(false), 8000);
                     }, 100);
                     const res = await fetch('http://localhost:5000/create-playlist', {
                       method: 'POST',
@@ -245,6 +248,7 @@ const PlaylistGenerator = () => {
 
     const [chatPrompt, setChatPrompt] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
+    const [editError, setEditError] = useState('');
 
     const handleRemove = (index) => {
       const updated = [...editedPlaylist];
@@ -276,6 +280,41 @@ const PlaylistGenerator = () => {
         console.error('Error refining playlist:', err);
       }
       setChatLoading(false);
+    };
+
+    const handleSaveToSpotify = async () => {
+      setEditError('');
+      // Only send valid tracks (with both track and artist)
+      const validTracks = editedPlaylist.filter(
+        item => item && typeof item.track === 'string' && typeof item.artist === 'string' && item.track.trim() && item.artist.trim()
+      );
+      if (!validTracks.length) {
+        setEditError('Playlist is empty or invalid.');
+        return;
+      }
+      setEditModalOpen(false);
+      setTimeout(() => {
+        setShowSavedMsg(true);
+        setShowSpotifyDelayMsg(true);
+        setTimeout(() => setShowSavedMsg(false), 1800);
+        setTimeout(() => setShowSpotifyDelayMsg(false), 8000);
+      }, 100);
+      const res = await fetch('http://localhost:5000/create-playlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: `Edited AI Playlist - ${new Date().toLocaleDateString()}`,
+          tracks: validTracks,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.playlistUrl) {
+        window.open(data.playlistUrl, '_blank');
+      }
     };
 
     return (
@@ -332,7 +371,9 @@ const PlaylistGenerator = () => {
             </li>
           ))}
         </ul>
-
+        {editError && (
+          <div className="mb-2 text-red-400 text-center">{editError}</div>
+        )}
         <div>
           <textarea
             value={chatPrompt}
@@ -351,30 +392,7 @@ const PlaylistGenerator = () => {
               {chatLoading ? 'Talking to AI...' : 'Update Playlist'}
             </button>
             <button
-              onClick={async () => {
-                setEditModalOpen(false);
-                // Show "Saved!" message on main page after modal closes
-                setTimeout(() => {
-                  setShowSavedMsg(true);
-                  setTimeout(() => setShowSavedMsg(false), 1800);
-                }, 100);
-                const res = await fetch('http://localhost:5000/create-playlist', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({
-                    name: `Edited AI Playlist - ${new Date().toLocaleDateString()}`,
-                    tracks: editedPlaylist,
-                  }),
-                });
-
-                const data = await res.json();
-                if (data.playlistUrl) {
-                  window.open(data.playlistUrl, '_blank');
-                }
-              }}
+              onClick={handleSaveToSpotify}
               className="px-4 py-2 rounded font-semibold transition bg-gray-700 hover:bg-gray-800 text-blue-100 border-2 border-green-500 shadow flex-1"
               style={{ minWidth: 0 }}
             >
@@ -467,6 +485,14 @@ const PlaylistGenerator = () => {
       >
         {showSavedMsg && "Saved!"}
       </div>
+      {showSpotifyDelayMsg && (
+        <div
+          className="transition-opacity duration-500 text-center mb-4 text-blue-300 font-medium text-base"
+          style={{ minHeight: '1.5em', zIndex: 1 }}
+        >
+          It may take a few minutes for your playlist to appear in your Spotify library.
+        </div>
+      )}
       {/* Main card with homepage-like styling */}
       <div
         className="w-full max-w-xl rounded-2xl shadow-2xl border border-blue-900 p-8 flex flex-col items-center backdrop-blur-md"
@@ -496,7 +522,7 @@ const PlaylistGenerator = () => {
             rows={3}
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="e.g. Chill songs for a rainy day, energetic workout tracks, etc."
+            placeholder="e.g. Chill songs for a rainy day, energetic workout tracks, etc. Be sure to include specific genres or artists you'd like to be included."
             required
             style={{ fontFamily: fontStack }}
           />

@@ -133,59 +133,61 @@ app.post('/generate-playlist', async(req, res) => {
 
   try {
     // fetch user data
-    // const topTracks = await spotifyApi.getMyTopTracks({ time_range: 'medium_term', limit: 20 });
-    // const trackSummary = topTracks.body.items.map(t => `${t.name} by ${t.artists[0].name}`).join(', ');
-    // get all of user's saved tracks
-    let allTracks = [];
-    let limit = 50;
-    let offset = 0;
-    let total = 0;
+    const [topTracksRes, topArtistsRes, savedTracksRes] = await Promise.all([
+      spotifyApi.getMyTopTracks({ limit: 10, time_range: 'long_term' }),
+      spotifyApi.getMyTopArtists({ limit: 10, time_range: 'long_term' }),
+      spotifyApi.getMySavedTracks({ limit: 50 })
+    ]);
 
-    do {
-      const response = await spotifyApi.getMySavedTracks({ limit, offset });
-      allTracks = allTracks.concat(response.body.items);
-      total = response.body.total;
-      offset += limit;
-    } while (allTracks.length < total);
+    // top 10 artists
+    const topArtists = topArtistsRes.body.items.map(a => a.name).join(', ');
 
-    // get unique artist ids
-    const artistIds = new Set();
-    allTracks.forEach(item => {
-      item.track.artists.forEach(artist => {
-        artistIds.add(artist.id);
-      });
+    // top 10 tracks 
+    const topTracks = topTracksRes.body.items.map(t => `"${t.name} by ${t.artists[0].name}"`).join(', ');
+
+    // genre summary from top artists (more reliable than saved tracks)
+    const genreCounts = {};
+    topArtistsRes.body.items.forEach(artist => {
+      if (artist.genres) {
+        artist.genres.forEach(genre => {
+          genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+        });
+      }
     });
 
-    // fetch genres from artists in batches of 50 
-    const artistArray = Array.from(artistIds);
-    const genreCount = {};
+    //get top 10 genres
+    const genreSummary = Object.entries(genreCounts)
+      .sort((a, b) => b[1] - a[1]) 
+      .slice(0, 10)
+      .map(([genre, count]) => `${genre} (${count})`)
+      .join(', ');
 
-    for (let i = 0; i < artistArray.length; i += 50) {
-      const batch = artistArray.slice(i, i + 50);
-      const artistData = await spotifyApi.getArtists(batch);
-
-      artistData.body.artists.forEach(artist => {
-        artist.genres.forEach(genre => {
-          genreCount[genre] = (genreCount[genre] || 0) + 1;
-        });
-      });
-    }
-
-    // build genre summary string
-    const genreSummary = Object.entries(genreCount)
-    .sort((a,b) => b[1] - a[1]) // sort by count descending
-    .slice(0, 15)
-    .map(([genre, count]) => `${genre} (${count})`)
-    .join(', ');
 
     // call openai to suggest tracks
+    const openAIPrompt = `
+User's top genres: ${genreSummary}.
+User's top artists: ${topArtists}.
+User's top tracks: ${topTracks}.
+Based on this and the prompt: "${userPrompt}", generate a playlist. Please generate a playlist that stays closely aligned with the user's listening preferences.
+Prioritize artists and genres that appear in the user's top genres, top artists, and top tracks.
+Favor related or similar artists only if needed to satisfy the user's request.
+Only add songs that feel like a natural fit based on the user's music taste. Avoid unrelated or random tracks.
+Stay within the same time range when considering what artists to add to the playlist, e.g. if the user's top artists are all 2010s and later, don't add songs that came out before then.
+Although the user's top tracks should be favored, do not include them if they are not relevant to the user's prompt.
+IMPORTANT: top priority when generating the playlist is to consider the user's prompt, don't stray from it much.
+
+IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...].
+IMPORTANT: the response should be strictly in this format.
+    `.trim();
+
+    console.log(openAIPrompt);
+
+    // Call OpenAI
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
-      messages: [
-      { role: 'system', content: 'You are a spotify playlist generator bot.'},
-      { role: 'user', content: `User listens to: ${genreSummary}. Based on this, and the prompt: "${userPrompt}", generate a playlist. IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...].
-          IMPORTANT: the response should be strictly in this format.` }
-      ],
+      messages: [{ role: 'user', content: openAIPrompt }],
+      max_tokens: 600,
+      temperature: 0.8,
     });
       
       const suggestions = completion.choices[0].message.content;
@@ -244,18 +246,68 @@ app.post('/refine-playlist', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1]; // gets token from request header
   if (!token) return res.status(401).send('No token provided');
 
-  const { prompt, playlist } = req.body;
+  const { prompt, playlist, originalPrompt } = req.body;
   if (!prompt || !playlist) return res.status(400).send('Invalid request body');
 
   try {
+    // Fetch user data (same as in /generate-playlist)
+    const { spotifyApi } = userSpotifyApis.get(token) || {};
+    if (!spotifyApi) return res.status(401).send('Invalid token');
+
+    const [topTracksRes, topArtistsRes, savedTracksRes] = await Promise.all([
+      spotifyApi.getMyTopTracks({ limit: 10, time_range: 'long_term' }),
+      spotifyApi.getMyTopArtists({ limit: 10, time_range: 'long_term' }),
+      spotifyApi.getMySavedTracks({ limit: 50 })
+    ]);
+
+    const topArtists = topArtistsRes.body.items.map(a => a.name).join(', ');
+    const topTracks = topTracksRes.body.items.map(t => `"${t.name} by ${t.artists[0].name}"`).join(', ');
+
+    const genreCounts = {};
+    savedTracksRes.body.items.forEach(item => {
+      item.track.artists.forEach(artist => {
+        if (artist.genres) {
+          artist.genres.forEach(genre => {
+            genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+          });
+        }
+      });
+    });
+    const genreSummary = Object.entries(genreCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([genre, count]) => `${genre} (${count})`)
+      .join(', ');
+
+    // Compose OpenAI prompt with user info and both prompts
+    const openAIPrompt = `
+User's top genres: ${genreSummary}.
+User's top artists: ${topArtists}.
+User's top tracks: ${topTracks}.
+Original playlist prompt: "${originalPrompt || ''}".
+Here is the current playlist: ${JSON.stringify(playlist)}.
+The user says: "${prompt}".
+Please generate an updated playlist that stays closely aligned with the user's listening preferences.
+Prioritize artists and genres that appear in the user's top genres, top artists, and top tracks.
+Favor related or similar artists only if needed to satisfy the user's request.
+Maintain as much of the original playlist as possible. Do not remove any tracks unless the user's prompt specifically asks for it.
+Only add songs that feel like a natural fit based on the user's music taste. Avoid unrelated or random tracks.
+Stay within the same time range when considering what artists to add to the playlist, e.g. if the user's top artists are all 2010s and later, don't add songs that came out before then.
+IMPORTANT: top priority when generating the playlist is to consider the user's prompt, don't stray from it much.
+IMPORTANT: UNLESS STATED OTHERWISE, DO NOT REMOVE ANY TRACKS FROM THE PLAYLIST.
+IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...]
+    `.trim();
+
+    console.log('Genre summary:', genreSummary);
+    console.log('Top artists:', topArtists);
+    console.log('Top tracks:', topTracks);
+    console.log(originalPrompt);
+
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo', 
+      model: 'gpt-3.5-turbo',
       messages: [
         { role: 'system', content: 'You are a helpful Spotify playlist editor.' },
-        { role: 'user', content: `Here is a playlist: ${JSON.stringify(playlist)}. The user says: "${prompt}". 
-        Please respond with the updated playlist as a JSON array with "track" and "artist" fields. Maintain the original playlist as much as possible,
-        do not remove tracks unless the prompt explicitly asks for it.
-        IMPORTANT: Respond with a JSON array of objects, each with "track" and "artist" fields, e.g. [{"track": "Song Name", "artist": "Artist Name"}, ...]`}
+        { role: 'user', content: openAIPrompt }
       ]
     });
     res.json({ playlist: completion.choices[0].message.content });
@@ -284,3 +336,4 @@ process.on('unhandledRejection', (reason, promise) => {
 app.listen(5000, () => {
   console.log('Server running on http://localhost:5000');
 });
+

@@ -14,3 +14,16 @@ improve the prompts to give more information about the user, allowing for better
 edit already existing playlist feature?
 
 option to edit the name of newly generated playlist, or just an ai name to fit it
+
+toggle button to use user info or not when generating playlist
+
+pull saved songs and find bpm to then sort it by bpm
+
+default pfp picture if user doesn't have one
+
+refresh access token after however much time
+
+toggle for if the user wants the playlist to be generated with their data or just generic
+
+improve the AI prompt part, have different text boxes for user, like one for how long they want the playlsit to be, 
+one for things that NEED to be in the playlist, etc.
